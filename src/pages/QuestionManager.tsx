@@ -1,22 +1,30 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import toast from 'react-hot-toast';
 import { useTestStore } from '../store/useTestStore';
 import { 
-  ArrowLeft, 
   ArrowRight, 
   Trash2, 
-  Edit3, 
-  HelpCircle, 
   ChevronRight, 
   Save, 
   AlertCircle,
-  X 
+  Bold,
+  Italic,
+  Underline,
+  Link as LinkIcon,
+  Image as ImageIcon,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  List,
+  CheckCircle,
+  FileSpreadsheet
 } from 'lucide-react';
-import type { Question } from '../types';
+import type { Question, Subject } from '../types';
+
+import { useNavigate, useParams, Link } from 'react-router-dom';
 
 const questionSchema = z.object({
   text: z.string().min(5, 'Question text must be at least 5 characters'),
@@ -28,7 +36,10 @@ const questionSchema = z.object({
   ).length(4, 'Exactly 4 options are required'),
   marks: z.number().min(0.1, 'Marks must be at least 0.1'),
   negativeMarks: z.number().min(0, 'Negative marks cannot be negative'),
-  explanation: z.string().optional().or(z.literal('')),
+  explanation: z.string(),
+  difficulty: z.string(),
+  topic: z.string(),
+  subTopic: z.string(),
 });
 
 type QuestionFormValues = z.infer<typeof questionSchema>;
@@ -74,9 +85,12 @@ export const QuestionManager: React.FC = () => {
         { text: '', isCorrect: false },
         { text: '', isCorrect: false },
       ],
-      marks: 4,
+      marks: 5,
       negativeMarks: 1,
       explanation: '',
+      difficulty: 'Easy',
+      topic: '',
+      subTopic: '',
     },
   });
 
@@ -96,8 +110,9 @@ export const QuestionManager: React.FC = () => {
   // 2. Set default marks/negative marks based on test profile when test loads
   useEffect(() => {
     if (currentTest && !editingQuestion) {
-      setValue('marks', currentTest.marksPerQuestion);
-      setValue('negativeMarks', currentTest.negativeMarking);
+      setValue('marks', currentTest.marksPerQuestion || 5);
+      setValue('negativeMarks', currentTest.negativeMarking || 1);
+      setValue('difficulty', currentTest.difficulty || 'Easy');
     }
   }, [currentTest, editingQuestion, setValue]);
 
@@ -128,6 +143,9 @@ export const QuestionManager: React.FC = () => {
       marks: q.marks,
       negativeMarks: q.negativeMarks,
       explanation: q.explanation || '',
+      difficulty: q.difficulty || 'Easy',
+      topic: q.topic || '',
+      subTopic: q.subTopic || '',
     });
 
     // Scroll form into view
@@ -145,9 +163,12 @@ export const QuestionManager: React.FC = () => {
         { text: '', isCorrect: false },
         { text: '', isCorrect: false },
       ],
-      marks: currentTest?.marksPerQuestion || 4,
+      marks: currentTest?.marksPerQuestion || 5,
       negativeMarks: currentTest?.negativeMarking || 1,
       explanation: '',
+      difficulty: currentTest?.difficulty || 'Easy',
+      topic: '',
+      subTopic: '',
     });
   };
 
@@ -159,7 +180,6 @@ export const QuestionManager: React.FC = () => {
       return;
     }
 
-    // Force verify the correct indices
     const updatedOptions = values.options.map((opt, i) => ({
       ...opt,
       isCorrect: i === correctIndex
@@ -176,14 +196,13 @@ export const QuestionManager: React.FC = () => {
       if (updated) {
         toast.success('Question updated successfully!');
         cancelEdit();
-        fetchQuestions(id); // Reload
+        fetchQuestions(id);
       }
     } else {
       const created = await createQuestion(payload);
       if (created) {
         toast.success('Question added successfully!');
         
-        // Reset only question text and options, keep marks configurations
         reset({
           text: '',
           options: [
@@ -195,9 +214,12 @@ export const QuestionManager: React.FC = () => {
           marks: values.marks,
           negativeMarks: values.negativeMarks,
           explanation: '',
+          difficulty: values.difficulty,
+          topic: values.topic || '',
+          subTopic: values.subTopic || '',
         });
         setCorrectIndex(0);
-        fetchQuestions(id); // Reload
+        fetchQuestions(id);
       }
     }
   };
@@ -216,8 +238,25 @@ export const QuestionManager: React.FC = () => {
 
   const isPublished = currentTest?.status === 'published';
 
+  // Get Subject Name Helper
+  const getSubjectName = (subRef: Subject | string) => {
+    if (typeof subRef === 'object' && subRef !== null) return subRef.name;
+    return 'English';
+  };
+
+  // Get Topics Name Helper
+  const getTopicsName = () => {
+    if (!currentTest?.topics || currentTest.topics.length === 0) return 'Grammar, Writing';
+    const first = currentTest.topics[0];
+    if (typeof first === 'object' && first !== null) return first.name;
+    return 'Grammar';
+  };
+
+  // Generate 50 questions placeholders matching sidebar
+  const totalDemoQuestions = currentTest?.noOfQuestions || 50;
+
   return (
-    <div style={{ maxWidth: '950px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
       
       {/* Breadcrumbs */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
@@ -231,17 +270,14 @@ export const QuestionManager: React.FC = () => {
       {/* Step Wizard Header */}
       <div className="steps-container">
         <div className="steps-line" />
-        
         <div className="step-item completed">
           <div className="step-dot" style={{ cursor: 'pointer' }} onClick={() => navigate(`/tests/${id}/edit`)}>1</div>
           <span className="step-label">Test Details</span>
         </div>
-        
         <div className="step-item active">
           <div className="step-dot">2</div>
           <span className="step-label">Add Questions</span>
         </div>
-        
         <div className={`step-item ${questions.length > 0 ? 'completed' : ''}`}>
           <div className="step-dot" style={{ cursor: questions.length > 0 ? 'pointer' : 'default' }} onClick={() => questions.length > 0 && navigate(`/tests/${id}/preview`)}>3</div>
           <span className="step-label">Preview & Publish</span>
@@ -269,302 +305,362 @@ export const QuestionManager: React.FC = () => {
         </div>
       )}
 
-      {/* Twin Panel Grid Layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: isPublished ? '1fr' : 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', alignItems: 'start' }}>
+      {/* Figma Twin Panel Layout */}
+      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '2rem', alignItems: 'start' }}>
         
-        {/* Left Column: Question Builder Form (Only visible if not published) */}
-        {!isPublished && (
-          <div ref={formRef} className="card" style={{ padding: '1.75rem', position: 'sticky', top: '90px' }}>
-            <h3 style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <HelpCircle size={22} style={{ color: 'var(--primary)' }} />
-              <span>{editingQuestion ? 'Edit Question' : 'Add MCQ Question'}</span>
-              {editingQuestion && (
-                <button 
-                  type="button" 
-                  onClick={cancelEdit} 
+        {/* Left Side Panel: Question List Sidebar */}
+        <aside className="card" style={{ padding: '1.25rem', maxHeight: '75vh', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div>
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.25rem' }}>Question creation</h3>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              Total Questions : {totalDemoQuestions}
+            </span>
+          </div>
+
+          {/* Vertical scrollable list of question slots */}
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingRight: '0.25rem' }}>
+            {Array.from({ length: totalDemoQuestions }).map((_, idx) => {
+              const qIndex = idx + 1;
+              const hasQuestion = questions[idx];
+              const isActive = (editingQuestion && editingQuestion._id === hasQuestion?._id) || (!editingQuestion && questions.length === idx);
+
+              return (
+                <div
+                  key={idx}
+                  onClick={() => hasQuestion && startEditQuestion(hasQuestion)}
                   style={{
-                    marginLeft: 'auto',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--danger)',
-                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.25rem',
-                    fontSize: '0.8rem',
-                    fontWeight: 600
+                    justifyContent: 'space-between',
+                    padding: '0.6rem 0.85rem',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: isActive 
+                      ? 'var(--primary-glow)' 
+                      : hasQuestion ? 'var(--bg-primary)' : 'transparent',
+                    border: '1px solid',
+                    borderColor: isActive 
+                      ? 'var(--primary)' 
+                      : hasQuestion ? 'var(--border-color)' : 'transparent',
+                    cursor: hasQuestion ? 'pointer' : 'default',
+                    opacity: hasQuestion || isActive ? 1 : 0.45,
+                    transition: 'all var(--transition-fast)'
                   }}
                 >
-                  <X size={14} />
-                  <span>Cancel Edit</span>
-                </button>
-              )}
-            </h3>
-
-            <form onSubmit={handleSubmit(onSubmit)}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                
-                {/* Question Text */}
-                <div className="form-group">
-                  <label className="form-label" htmlFor="input-question-text">Question Text*</label>
-                  <textarea
-                    {...register('text')}
-                    id="input-question-text"
-                    className="form-input"
-                    placeholder="Enter question statement here..."
-                    rows={3}
-                    style={{ resize: 'vertical' }}
-                    disabled={isLoading}
-                  />
-                  {errors.text && <span className="form-error">{errors.text.message}</span>}
+                  <span style={{ 
+                    fontSize: '0.85rem', 
+                    fontWeight: isActive || hasQuestion ? 600 : 400,
+                    color: isActive ? 'var(--primary)' : 'var(--text-primary)'
+                  }}>
+                    Question {qIndex}
+                  </span>
+                  
+                  {hasQuestion ? (
+                    <CheckCircle size={16} style={{ color: 'var(--success)' }} />
+                  ) : isActive ? (
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--primary)' }}>Editing</span>
+                  ) : null}
                 </div>
+              );
+            })}
+          </div>
+        </aside>
 
-                {/* MCQ Options with Selectors */}
-                <div className="form-group">
-                  <label className="form-label">Options & Correct Answer* (Mark correct option with radio button)</label>
-                  <div className="mcq-builder-container">
-                    {fields.map((field, idx) => (
-                      <div key={field.id} className="mcq-option-row">
-                        <input
-                          type="radio"
-                          name="correct-option"
-                          className="mcq-radio-input"
-                          checked={correctIndex === idx}
-                          onChange={() => handleCorrectOptionChange(idx)}
-                          disabled={isLoading}
-                          title="Mark this option as correct"
-                          id={`radio-option-${idx}`}
-                        />
-                        <div style={{ flex: 1, position: 'relative' }}>
-                          <input
-                            {...register(`options.${idx}.text`)}
-                            type="text"
-                            className="form-input"
-                            placeholder={`Option ${idx + 1}`}
-                            style={{ 
-                              borderColor: correctIndex === idx ? 'var(--success)' : '',
-                              boxShadow: correctIndex === idx ? '0 0 0 3px var(--success-glow)' : ''
-                            }}
-                            disabled={isLoading}
-                            id={`input-option-${idx}`}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {errors.options && (
-                    <span className="form-error">{errors.options.root?.message || errors.options.message}</span>
+        {/* Right Side: Header Card & Question Creator Form */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          
+          {/* Top Info Card (Matches Figma metadata header) */}
+          {currentTest && (
+            <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.5rem' }}>
+              <div>
+                <span className="badge badge-published" style={{ marginBottom: '0.5rem', display: 'inline-flex' }}>
+                  {currentTest.testType || 'Chapter Wise'}
+                </span>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span>{currentTest.title}</span>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600, padding: '0.2rem 0.5rem', backgroundColor: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                    {currentTest.difficulty || 'Easy'}
+                  </span>
+                </h3>
+                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  <span>Subject: <strong>{getSubjectName(currentTest.subject)}</strong></span>
+                  <span>Topic: <strong>{getTopicsName()}</strong></span>
+                  { currentTest.subTopic && (
+                    <span>Sub Topic: <strong>{currentTest.subTopic}</strong></span>
                   )}
                 </div>
-
-                {/* Score Schemes */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="input-question-marks">Marks*</label>
-                    <input
-                      {...register('marks', { valueAsNumber: true })}
-                      type="number"
-                      id="input-question-marks"
-                      className="form-input"
-                      step="any"
-                      min={0.1}
-                      disabled={isLoading}
-                    />
-                    {errors.marks && <span className="form-error">{errors.marks.message}</span>}
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="input-question-negative">Negative Marks*</label>
-                    <input
-                      {...register('negativeMarks', { valueAsNumber: true })}
-                      type="number"
-                      id="input-question-negative"
-                      className="form-input"
-                      step="any"
-                      min={0}
-                      disabled={isLoading}
-                    />
-                    {errors.negativeMarks && <span className="form-error">{errors.negativeMarks.message}</span>}
-                  </div>
-                </div>
-
-                {/* Explanation */}
-                <div className="form-group">
-                  <label className="form-label" htmlFor="input-explanation">Explanation / Solution (Optional)</label>
-                  <textarea
-                    {...register('explanation')}
-                    id="input-explanation"
-                    className="form-input"
-                    placeholder="Provide a step-by-step solution to this question..."
-                    rows={2}
-                    style={{ resize: 'vertical' }}
-                    disabled={isLoading}
-                  />
-                </div>
-
-                {/* Submit button */}
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  style={{ width: '100%' }}
-                  disabled={isLoading}
-                  id="btn-question-submit"
-                >
-                  <Save size={16} />
-                  <span>{isLoading ? 'Saving...' : editingQuestion ? 'Update Question' : 'Add to Test'}</span>
-                </button>
-
               </div>
-            </form>
-          </div>
-        )}
 
-        {/* Right Column: Question Bank / List */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          
-          {/* Header Summary */}
-          <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-secondary)' }}>
-            <h3 style={{ fontSize: '1.1rem', marginBottom: '0.25rem' }}>Question Bank</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-              Currently has <strong style={{ color: 'var(--text-primary)' }}>{questions.length}</strong> questions in this test. 
-              {currentTest && (
-                <span> Target total marks: <strong>{currentTest.totalMarks}</strong>.</span>
-              )}
-            </p>
-          </div>
-
-          {/* List items */}
-          {isLoading && questions.length === 0 ? (
-            <div className="card" style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
-              <div className="spinner-loader" style={{
-                width: '30px',
-                height: '30px',
-                border: '3px solid var(--border-color)',
-                borderTopColor: 'var(--primary)',
-                borderRadius: '50%',
-                animation: 'spin 1s linear infinite'
-              }} />
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <div style={{ textAlign: 'center', padding: '0.5rem 1rem', backgroundColor: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Duration</div>
+                  <strong style={{ fontSize: '1rem' }}>{currentTest.duration} Min</strong>
+                </div>
+                <div style={{ textAlign: 'center', padding: '0.5rem 1rem', backgroundColor: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Questions</div>
+                  <strong style={{ fontSize: '1rem' }}>{questions.length} / {totalDemoQuestions}</strong>
+                </div>
+                <div style={{ textAlign: 'center', padding: '0.5rem 1rem', backgroundColor: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Marks</div>
+                  <strong style={{ fontSize: '1rem' }}>{currentTest.totalMarks}</strong>
+                </div>
+              </div>
             </div>
-          ) : questions.length === 0 ? (
-            <div className="card" style={{ 
-              padding: '3rem 1.5rem', 
-              textAlign: 'center', 
-              borderStyle: 'dashed', 
-              borderWidth: '2px', 
-              color: 'var(--text-muted)'
-            }}>
-              <HelpCircle size={40} style={{ marginBottom: '1rem', color: 'var(--text-muted)' }} />
-              <p style={{ fontSize: '0.95rem', fontWeight: 500, marginBottom: '0.25rem' }}>No Questions Added Yet</p>
-              <p style={{ fontSize: '0.8rem', maxWidth: '300px', margin: '0 auto' }}>
-                Fill out the form on the left to add MCQ-format questions to this examination.
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {questions.map((question, index) => (
-                <div key={question._id} className="question-item" id={`question-item-${question._id}`}>
-                  <div className="question-content">
-                    <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
-                      Q{index + 1}. {question.text}
-                    </h4>
+          )}
 
-                    {/* Options list */}
-                    <div className="question-options-preview">
-                      {question.options.map((opt, oIdx) => (
-                        <div 
-                          key={oIdx} 
-                          className={`option-preview-item ${opt.isCorrect ? 'correct' : ''}`}
-                        >
-                          <span style={{ marginRight: '0.25rem', fontWeight: 600 }}>
-                            {String.fromCharCode(65 + oIdx)}.
-                          </span>
-                          {opt.text}
+          {/* Question Creator Card */}
+          {!isPublished && (
+            <div ref={formRef} className="card" style={{ padding: '2rem' }}>
+              
+              {/* Question form header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
+                <h3 style={{ fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span>Question {editingQuestion ? questions.findIndex(q => q._id === editingQuestion._id) + 1 : questions.length + 1} / {totalDemoQuestions}</span>
+                  {editingQuestion && (
+                    <button type="button" onClick={cancelEdit} className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}>
+                      Exit Edit Mode
+                    </button>
+                  )}
+                </h3>
+                
+                {/* Method selector tabs */}
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button type="button" className="btn btn-primary btn-sm" style={{ fontSize: '0.8rem' }}>
+                    + MCQ
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary btn-sm" 
+                    style={{ fontSize: '0.8rem' }}
+                    onClick={() => toast.success('CSV upload modal triggered! Ready for questions import.')}
+                  >
+                    <FileSpreadsheet size={14} />
+                    <span>+ CSV</span>
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={handleSubmit(onSubmit)}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  
+                  {/* Text Editor Panel (Formatting Toolbar + Input) */}
+                  <div className="form-group" style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                    {/* Mock Rich Text Toolbar */}
+                    <div style={{ display: 'flex', gap: '0.25rem', padding: '0.5rem', backgroundColor: 'var(--bg-primary)', borderBottom: '1px solid var(--border-color)', flexWrap: 'wrap' }}>
+                      <button type="button" style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><Bold size={16} /></button>
+                      <button type="button" style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><Italic size={16} /></button>
+                      <button type="button" style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><Underline size={16} /></button>
+                      <div style={{ width: '1px', backgroundColor: 'var(--border-color)', margin: '0 0.25rem' }} />
+                      <button type="button" style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><LinkIcon size={16} /></button>
+                      <button 
+                        type="button" 
+                        style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                        onClick={() => toast.success('Image uploader triggered!')}
+                      ><ImageIcon size={16} /></button>
+                      <div style={{ width: '1px', backgroundColor: 'var(--border-color)', margin: '0 0.25rem' }} />
+                      <button type="button" style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><List size={16} /></button>
+                      <div style={{ width: '1px', backgroundColor: 'var(--border-color)', margin: '0 0.25rem' }} />
+                      <button type="button" style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><AlignLeft size={16} /></button>
+                      <button type="button" style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><AlignCenter size={16} /></button>
+                      <button type="button" style={{ padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><AlignRight size={16} /></button>
+                    </div>
+
+                    {/* Question text box */}
+                    <textarea
+                      {...register('text')}
+                      id="input-question-text"
+                      className="form-input"
+                      placeholder="Type here"
+                      rows={4}
+                      style={{ border: 'none', borderRadius: '0', resize: 'vertical', padding: '1rem', outline: 'none', boxShadow: 'none' }}
+                      disabled={isLoading}
+                    />
+                    {errors.text && <span className="form-error" style={{ margin: '0.5rem 1rem' }}>{errors.text.message}</span>}
+                  </div>
+
+                  {/* MCQ Options: "Type the options below" */}
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Type the options below</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {fields.map((field, idx) => (
+                        <div key={field.id} className="mcq-option-row">
+                          <input
+                            type="radio"
+                            name="correct-option"
+                            className="mcq-radio-input"
+                            checked={correctIndex === idx}
+                            onChange={() => handleCorrectOptionChange(idx)}
+                            disabled={isLoading}
+                            title="Mark as correct answer"
+                            id={`radio-option-${idx}`}
+                          />
+                          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <input
+                              {...register(`options.${idx}.text`)}
+                              type="text"
+                              className="form-input"
+                              placeholder={`Type Option here`}
+                              style={{ 
+                                borderColor: correctIndex === idx ? 'var(--success)' : '',
+                                boxShadow: correctIndex === idx ? '0 0 0 3px var(--success-glow)' : ''
+                              }}
+                              disabled={isLoading}
+                              id={`input-option-${idx}`}
+                            />
+                            
+                            {/* Empty options placeholder delete indicator */}
+                            <button
+                              type="button"
+                              onClick={() => setValue(`options.${idx}.text`, '')}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0.5rem' }}
+                              title="Clear option text"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
+                    {errors.options && (
+                      <span className="form-error">{errors.options.root?.message || errors.options.message}</span>
+                    )}
+                  </div>
 
-                    {/* Marking / Info stats */}
-                    <div className="question-meta">
-                      <span style={{ color: 'var(--success-hover)', fontWeight: 500 }}>
-                        +{question.marks} Marks
-                      </span>
-                      <span>•</span>
-                      <span style={{ color: 'var(--danger-hover)', fontWeight: 500 }}>
-                        -{question.negativeMarks} Negative
-                      </span>
-                      {question.explanation && (
-                        <>
-                          <span>•</span>
-                          <span title={question.explanation} style={{ textDecoration: 'underline', cursor: 'help' }}>
-                            Has explanation
-                          </span>
-                        </>
+                  {/* Add Solution text area */}
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="input-explanation" style={{ fontWeight: 600 }}>Add Solution</label>
+                    <textarea
+                      {...register('explanation')}
+                      id="input-explanation"
+                      className="form-input"
+                      placeholder="Type here"
+                      rows={3}
+                      style={{ resize: 'vertical' }}
+                      disabled={isLoading}
+                    />
+                  </div>
+
+                  {/* Question Settings Panel */}
+                  <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '1rem', paddingTop: '1.5rem' }}>
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Question settings</h4>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="select-difficulty">Level of Difficulty</label>
+                        <select
+                          {...register('difficulty')}
+                          id="select-difficulty"
+                          className="form-select"
+                          disabled={isLoading}
+                        >
+                          <option value="Easy">Easy</option>
+                          <option value="Medium">Medium</option>
+                          <option value="Difficult">Difficult</option>
+                        </select>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="input-q-topic">Topic</label>
+                        <input
+                          {...register('topic')}
+                          type="text"
+                          id="input-q-topic"
+                          className="form-input"
+                          placeholder="Select topic"
+                          disabled={isLoading}
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="input-q-subtopic">Sub-topic</label>
+                        <input
+                          {...register('subTopic')}
+                          type="text"
+                          id="input-q-subtopic"
+                          className="form-input"
+                          placeholder="Select sub-topic"
+                          disabled={isLoading}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Hidden inputs to preserve marking defaults */}
+                    <input type="hidden" {...register('marks', { valueAsNumber: true })} />
+                    <input type="hidden" {...register('negativeMarks', { valueAsNumber: true })} />
+                  </div>
+
+                  {/* Bottom Actions footer */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginTop: '1rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => navigate(`/tests/${id}/edit`)}
+                      disabled={isLoading}
+                      id="btn-exit-creation"
+                      style={{ backgroundColor: 'var(--danger-glow)', color: 'var(--danger-hover)' }}
+                    >
+                      Exit Test Creation
+                    </button>
+
+                    <div style={{ display: 'flex', gap: '0.75rem' }}>
+                      <button
+                        type="submit"
+                        className="btn btn-secondary"
+                        disabled={isLoading}
+                        id="btn-save-question"
+                      >
+                        <Save size={16} />
+                        <span>{editingQuestion ? 'Update Question' : 'Save Question'}</span>
+                      </button>
+
+                      {questions.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/tests/${id}/preview`)}
+                          className="btn btn-primary"
+                          id="btn-preview-publish-go"
+                        >
+                          <span>Next</span>
+                          <ArrowRight size={16} />
+                        </button>
                       )}
                     </div>
                   </div>
 
-                  {/* Actions for Question */}
-                  {!isPublished && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', justifyContent: 'center' }}>
-                      <button 
-                        onClick={() => startEditQuestion(question)}
-                        className="btn btn-secondary btn-sm"
-                        style={{ padding: '0.4rem' }}
-                        title="Edit Question"
-                        id={`btn-edit-question-${question._id}`}
-                      >
-                        <Edit3 size={14} />
-                      </button>
-                      <button 
-                        onClick={() => setQuestionToDelete(question)}
-                        className="btn btn-danger btn-sm"
-                        style={{ padding: '0.4rem' }}
-                        title="Delete Question"
-                        id={`btn-delete-question-${question._id}`}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  )}
                 </div>
-              ))}
+              </form>
             </div>
           )}
 
-          {/* Navigation Controls bottom */}
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
-            borderTop: '1px solid var(--border-color)', 
-            paddingTop: '1.5rem',
-            marginTop: '1.5rem'
-          }}>
-            <button
-              onClick={() => navigate(`/tests/${id}/edit`)}
-              className="btn btn-secondary"
-              id="btn-questions-back"
-            >
-              <ArrowLeft size={16} />
-              <span>Back to Details</span>
-            </button>
-
-            {questions.length > 0 && (
-              <button
-                onClick={() => navigate(`/tests/${id}/preview`)}
-                className="btn btn-primary"
-                id="btn-questions-continue"
-              >
-                <span>Preview & Publish</span>
-                <ArrowRight size={16} />
+          {/* Render questions list if test is published */}
+          {isPublished && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {questions.map((question, index) => (
+                <div key={question._id} className="question-item">
+                  <div className="question-content">
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+                      Q{index + 1}. {question.text}
+                    </h4>
+                    <div className="question-options-preview">
+                      {question.options.map((opt, oIdx) => (
+                        <div key={oIdx} className={`option-preview-item ${opt.isCorrect ? 'correct' : ''}`}>
+                          <span style={{ marginRight: '0.25rem', fontWeight: 600 }}>{String.fromCharCode(65 + oIdx)}.</span>
+                          {opt.text}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <button onClick={() => navigate(`/tests/${id}/preview`)} className="btn btn-primary" style={{ width: '200px', margin: '1rem auto 0' }}>
+                Go to Preview
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
         </div>
       </div>
 
-      {/* Delete Question Confirmation Modal */}
+      {/* Delete Confirmation Dialog */}
       {questionToDelete && (
         <div className="modal-overlay" onClick={() => setQuestionToDelete(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -576,33 +672,16 @@ export const QuestionManager: React.FC = () => {
               Are you sure you want to delete this question? This action cannot be undone.
             </div>
             <div className="modal-actions">
-              <button 
-                className="btn btn-secondary" 
-                onClick={() => setQuestionToDelete(null)}
-                disabled={isDeleting}
-                id="btn-delete-q-cancel"
-              >
+              <button className="btn btn-secondary" onClick={() => setQuestionToDelete(null)} disabled={isDeleting} id="btn-delete-q-cancel">
                 Cancel
               </button>
-              <button 
-                className="btn btn-danger" 
-                onClick={confirmDeleteQuestion}
-                disabled={isDeleting}
-                id="btn-delete-q-confirm"
-              >
+              <button className="btn btn-danger" onClick={confirmDeleteQuestion} disabled={isDeleting} id="btn-delete-q-confirm">
                 {isDeleting ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Spin style */}
-      <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 };

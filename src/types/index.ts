@@ -34,6 +34,11 @@ export interface Test {
   createdBy: User | string;
   createdAt: string;
   updatedAt: string;
+  difficulty?: string;
+  testType?: string;
+  subTopic?: string;
+  unattemptedMarks?: number;
+  noOfQuestions?: number;
 }
 
 export interface CreateTestPayload {
@@ -45,6 +50,11 @@ export interface CreateTestPayload {
   totalMarks: number;
   marksPerQuestion: number;
   negativeMarking: number;
+  difficulty?: string;
+  testType?: string;
+  subTopic?: string;
+  unattemptedMarks?: number;
+  noOfQuestions?: number;
 }
 
 export interface UpdateTestPayload extends Partial<CreateTestPayload> {
@@ -86,6 +96,9 @@ export interface Question {
   explanation?: string;
   createdAt?: string;
   updatedAt?: string;
+  difficulty?: string;
+  topic?: string;
+  subTopic?: string;
 }
 
 export interface CreateQuestionPayload {
@@ -95,6 +108,9 @@ export interface CreateQuestionPayload {
   marks: number;
   negativeMarks: number;
   explanation?: string;
+  difficulty?: string;
+  topic?: string;
+  subTopic?: string;
 }
 
 // API Response types

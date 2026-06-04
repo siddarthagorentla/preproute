@@ -11,17 +11,22 @@ import {
   ChevronRight, 
   AlertCircle 
 } from 'lucide-react';
-import type { Topic } from '../types';
+import type { Topic, CreateTestPayload } from '../types';
 
 const testSchema = z.object({
-  title: z.string().min(3, 'Title must be at least 3 characters'),
-  description: z.string().optional().or(z.literal('')),
+  title: z.string().min(3, 'Test name must be at least 3 characters'),
+  description: z.string(),
   subject: z.string().min(1, 'Subject is required'),
   topics: z.array(z.string()).min(1, 'Select at least one topic'),
   duration: z.number().min(1, 'Duration must be at least 1 minute'),
   totalMarks: z.number().min(1, 'Total marks must be at least 1'),
-  marksPerQuestion: z.number().min(1, 'Marks per question must be at least 1'),
-  negativeMarking: z.number().min(0, 'Negative marking cannot be negative'),
+  marksPerQuestion: z.number().min(1, 'Correct answer marks must be at least 1'),
+  negativeMarking: z.number().min(0, 'Wrong answer negative marks cannot be negative'),
+  difficulty: z.string(),
+  testType: z.string(),
+  subTopic: z.string(),
+  unattemptedMarks: z.number(),
+  noOfQuestions: z.number().min(1, 'Number of questions must be at least 1'),
 });
 
 type TestFormValues = z.infer<typeof testSchema>;
@@ -46,6 +51,7 @@ export const TestForm: React.FC = () => {
   } = useTestStore();
 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<string>('Chapter Wise');
 
   const {
     register,
@@ -59,19 +65,24 @@ export const TestForm: React.FC = () => {
     resolver: zodResolver(testSchema),
     defaultValues: {
       title: '',
-      description: '',
+      description: 'Exam details created via Preproute panel.',
       subject: '',
       topics: [],
       duration: 60,
-      totalMarks: 100,
-      marksPerQuestion: 4,
+      totalMarks: 250,
+      marksPerQuestion: 5,
       negativeMarking: 1,
+      difficulty: 'Easy',
+      testType: 'Chapter Wise',
+      subTopic: '',
+      unattemptedMarks: 0,
+      noOfQuestions: 50,
     },
   });
 
   const watchedSubject = watch('subject');
 
-  // 1. Initial Load: Fetch Subjects and Test details (if in edit mode)
+  // 1. Initial Load
   useEffect(() => {
     fetchSubjects();
     if (isEditMode && id) {
@@ -80,13 +91,18 @@ export const TestForm: React.FC = () => {
       clearCurrentTest();
       reset({
         title: '',
-        description: '',
+        description: 'Exam details created via Preproute panel.',
         subject: '',
         topics: [],
         duration: 60,
-        totalMarks: 100,
-        marksPerQuestion: 4,
+        totalMarks: 250,
+        marksPerQuestion: 5,
         negativeMarking: 1,
+        difficulty: 'Easy',
+        testType: 'Chapter Wise',
+        subTopic: '',
+        unattemptedMarks: 0,
+        noOfQuestions: 50,
       });
     }
   }, [id, isEditMode, fetchSubjects, fetchTestById, clearCurrentTest, reset]);
@@ -95,7 +111,6 @@ export const TestForm: React.FC = () => {
   useEffect(() => {
     if (watchedSubject) {
       fetchTopics(watchedSubject);
-      // Clear topics selection if user changes subject
       if (selectedSubjectId && watchedSubject !== selectedSubjectId) {
         setValue('topics', []);
       }
@@ -105,7 +120,7 @@ export const TestForm: React.FC = () => {
     }
   }, [watchedSubject, fetchTopics, setValue, selectedSubjectId]);
 
-  // 3. Populate form in edit mode when currentTest changes
+  // 3. Populate form in edit mode
   useEffect(() => {
     if (isEditMode && currentTest) {
       const subjectId = typeof currentTest.subject === 'object' && currentTest.subject !== null
@@ -118,15 +133,21 @@ export const TestForm: React.FC = () => {
 
       reset({
         title: currentTest.title,
-        description: currentTest.description || '',
+        description: currentTest.description || 'Exam details created via Preproute panel.',
         subject: subjectId,
         topics: topicIds,
         duration: currentTest.duration,
         totalMarks: currentTest.totalMarks,
         marksPerQuestion: currentTest.marksPerQuestion,
         negativeMarking: currentTest.negativeMarking,
+        difficulty: currentTest.difficulty || 'Easy',
+        testType: currentTest.testType || 'Chapter Wise',
+        subTopic: currentTest.subTopic || '',
+        unattemptedMarks: currentTest.unattemptedMarks || 0,
+        noOfQuestions: currentTest.noOfQuestions || currentTest.questions?.length || 50,
       });
       setSelectedSubjectId(subjectId);
+      setActiveTab(currentTest.testType || 'Chapter Wise');
     }
   }, [currentTest, isEditMode, reset]);
 
@@ -137,10 +158,27 @@ export const TestForm: React.FC = () => {
     }
   }, [error]);
 
+  const handleTabClick = (tab: string) => {
+    setActiveTab(tab);
+    setValue('testType', tab);
+  };
+
   const onSubmit = async (values: TestFormValues) => {
-    const payload = {
-      ...values,
-      description: values.description || '',
+    const payload: CreateTestPayload = {
+      title: values.title,
+      description: values.description || 'Exam details created via Preproute panel.',
+      subject: values.subject,
+      topics: values.topics,
+      duration: values.duration,
+      totalMarks: values.totalMarks,
+      marksPerQuestion: values.marksPerQuestion,
+      negativeMarking: values.negativeMarking,
+      // Pass the extra visual fields in the payload as well
+      difficulty: values.difficulty,
+      testType: values.testType,
+      subTopic: values.subTopic,
+      unattemptedMarks: values.unattemptedMarks,
+      noOfQuestions: values.noOfQuestions
     };
 
     if (isEditMode && id) {
@@ -165,7 +203,7 @@ export const TestForm: React.FC = () => {
   const isPublished = currentTest?.status === 'published';
 
   return (
-    <div style={{ maxWidth: '850px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
       
       {/* Breadcrumbs */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
@@ -177,17 +215,14 @@ export const TestForm: React.FC = () => {
       {/* Step Wizard Header */}
       <div className="steps-container">
         <div className="steps-line" />
-        
         <div className="step-item active">
           <div className="step-dot">1</div>
           <span className="step-label">Test Details</span>
         </div>
-        
         <div className={`step-item ${isEditMode ? 'completed' : ''}`}>
           <div className="step-dot" style={{ cursor: isEditMode ? 'pointer' : 'default' }} onClick={() => isEditMode && navigate(`/tests/${id}/questions`)}>2</div>
           <span className="step-label">Add Questions</span>
         </div>
-        
         <div className={`step-item ${isEditMode && currentTest?.questions?.length ? 'completed' : ''}`}>
           <div className="step-dot" style={{ cursor: isEditMode ? 'pointer' : 'default' }} onClick={() => isEditMode && navigate(`/tests/${id}/preview`)}>3</div>
           <span className="step-label">Preview & Publish</span>
@@ -215,182 +250,223 @@ export const TestForm: React.FC = () => {
         </div>
       )}
 
-      {/* Form Card */}
-      <div className="card" style={{ padding: '2rem' }}>
+      {/* Form Card (Styled to match Chapter Wise layout exactly) */}
+      <div className="card" style={{ padding: '2.5rem' }}>
+        
+        {/* Form Header Tabs */}
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
+          {['Chapter Wise', 'PYQ', 'Mock Test'].map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              className="btn"
+              style={{
+                padding: '0.5rem 1.25rem',
+                fontSize: '0.85rem',
+                borderRadius: '9999px',
+                backgroundColor: activeTab === tab ? 'var(--primary-glow)' : 'var(--bg-primary)',
+                color: activeTab === tab ? 'var(--primary)' : 'var(--text-secondary)',
+                border: '1px solid',
+                borderColor: activeTab === tab ? 'var(--primary)' : 'var(--border-color)',
+                fontWeight: 600,
+                transition: 'all var(--transition-fast)'
+              }}
+              onClick={() => !isPublished && handleTabClick(tab)}
+              disabled={isPublished}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
         <form onSubmit={handleSubmit(onSubmit)} id="test-form">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             
-            {/* Title */}
-            <div className="form-group">
-              <label className="form-label" htmlFor="input-title">Test Title*</label>
-              <input
-                {...register('title')}
-                type="text"
-                id="input-title"
-                className="form-input"
-                placeholder="e.g. React hooks and state management quiz"
-                disabled={isLoading || isPublished}
-              />
-              {errors.title && <span className="form-error">{errors.title.message}</span>}
+            {/* Grid Row 1: Subject | Name of Test */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="select-subject">Subject*</label>
+                <select
+                  {...register('subject')}
+                  id="select-subject"
+                  className="form-select"
+                  disabled={isLoading || isPublished}
+                >
+                  <option value="">Choose from Drop-down</option>
+                  {subjects.map((sub) => (
+                    <option key={sub._id} value={sub._id}>
+                      {sub.name}
+                    </option>
+                  ))}
+                </select>
+                {errors.subject && <span className="form-error">{errors.subject.message}</span>}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="input-title">Name of Test*</label>
+                <input
+                  {...register('title')}
+                  type="text"
+                  id="input-title"
+                  className="form-input"
+                  placeholder="Enter name of Test"
+                  disabled={isLoading || isPublished}
+                />
+                {errors.title && <span className="form-error">{errors.title.message}</span>}
+              </div>
             </div>
 
-            {/* Description */}
-            <div className="form-group">
-              <label className="form-label" htmlFor="input-description">Description</label>
-              <textarea
-                {...register('description')}
-                id="input-description"
-                className="form-input"
-                placeholder="Provide details about the test syllabus, number of questions, etc."
-                rows={3}
-                style={{ resize: 'vertical' }}
-                disabled={isLoading || isPublished}
-              />
-              {errors.description && <span className="form-error">{errors.description.message}</span>}
-            </div>
-
-            {/* Subject Select */}
-            <div className="form-group">
-              <label className="form-label" htmlFor="select-subject">Subject*</label>
-              <select
-                {...register('subject')}
-                id="select-subject"
-                className="form-select"
-                disabled={isLoading || isPublished}
-              >
-                <option value="">Select a subject...</option>
-                {subjects.map((sub) => (
-                  <option key={sub._id} value={sub._id}>
-                    {sub.name}
-                  </option>
-                ))}
-              </select>
-              {errors.subject && <span className="form-error">{errors.subject.message}</span>}
-            </div>
-
-            {/* Topics Multi-Select */}
-            <div className="form-group">
-              <label className="form-label">Topics* (Select one or more)</label>
-              {!watchedSubject ? (
-                <div style={{
-                  padding: '1.5rem',
-                  textAlign: 'center',
-                  backgroundColor: 'var(--bg-primary)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 'var(--radius-md)',
-                  color: 'var(--text-muted)',
-                  fontSize: '0.9rem'
-                }}>
-                  Please select a subject to see topics.
-                </div>
-              ) : topics.length === 0 ? (
-                <div style={{
-                  padding: '1.5rem',
-                  textAlign: 'center',
-                  backgroundColor: 'var(--bg-primary)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 'var(--radius-md)',
-                  color: 'var(--text-muted)',
-                  fontSize: '0.9rem'
-                }}>
-                  No topics available for this subject.
-                </div>
-              ) : (
-                <>
+            {/* Grid Row 2: Topic | Sub Topic */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+              <div className="form-group">
+                <label className="form-label">Topic*</label>
+                {!watchedSubject ? (
+                  <select className="form-select" disabled>
+                    <option>Choose from Drop-down</option>
+                  </select>
+                ) : (
                   <Controller
                     name="topics"
                     control={control}
                     render={({ field }) => (
-                      <div className="topics-grid" id="topics-multi-select">
-                        {topics.map((topic) => {
-                          const isChecked = field.value.includes(topic._id);
-                          return (
-                            <label key={topic._id} className="topic-checkbox-label">
-                              <input
-                                type="checkbox"
-                                value={topic._id}
-                                checked={isChecked}
-                                onChange={() => {
-                                  const newValue = isChecked
-                                    ? field.value.filter((val) => val !== topic._id)
-                                    : [...field.value, topic._id];
-                                  field.onChange(newValue);
-                                }}
-                                disabled={isLoading || isPublished}
-                                style={{ accentColor: 'var(--primary)', cursor: 'pointer' }}
-                              />
-                              <span>{topic.name}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
+                      <select
+                        className="form-select"
+                        value={field.value[0] || ''}
+                        onChange={(e) => field.onChange([e.target.value])}
+                        disabled={isLoading || isPublished}
+                      >
+                        <option value="">Choose from Drop-down</option>
+                        {topics.map((t) => (
+                          <option key={t._id} value={t._id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
                     )}
                   />
-                  {errors.topics && <span className="form-error">{errors.topics.message}</span>}
-                </>
-              )}
+                )}
+                {errors.topics && <span className="form-error">{errors.topics.message}</span>}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="input-subtopic">Sub Topic</label>
+                <input
+                  {...register('subTopic')}
+                  type="text"
+                  id="input-subtopic"
+                  className="form-input"
+                  placeholder="Choose from Drop-down"
+                  disabled={isLoading || isPublished}
+                />
+              </div>
             </div>
 
-            {/* Grid for marking scheme fields */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.25rem' }}>
-              
-              {/* Duration */}
+            {/* Grid Row 3: Duration (Minutes) | Test Difficulty Level */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
               <div className="form-group">
-                <label className="form-label" htmlFor="input-duration">Duration (minutes)*</label>
+                <label className="form-label" htmlFor="input-duration">Duration (Minutes)*</label>
                 <input
                   {...register('duration', { valueAsNumber: true })}
                   type="number"
                   id="input-duration"
                   className="form-input"
+                  placeholder="Enter the time"
                   min={1}
                   disabled={isLoading || isPublished}
                 />
                 {errors.duration && <span className="form-error">{errors.duration.message}</span>}
               </div>
 
-              {/* Total Marks */}
               <div className="form-group">
-                <label className="form-label" htmlFor="input-totalMarks">Total Marks*</label>
-                <input
-                  {...register('totalMarks', { valueAsNumber: true })}
-                  type="number"
-                  id="input-totalMarks"
-                  className="form-input"
-                  min={1}
-                  disabled={isLoading || isPublished}
-                />
-                {errors.totalMarks && <span className="form-error">{errors.totalMarks.message}</span>}
+                <label className="form-label">Test Difficulty Level</label>
+                <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.75rem' }}>
+                  {['Easy', 'Medium', 'Difficult'].map((level) => (
+                    <label key={level} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.95rem', cursor: 'pointer' }}>
+                      <input
+                        {...register('difficulty')}
+                        type="radio"
+                        value={level}
+                        disabled={isLoading || isPublished}
+                        style={{ accentColor: 'var(--primary)', width: '18px', height: '18px' }}
+                      />
+                      <span>{level}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
+            </div>
 
-              {/* Marks Per Question */}
-              <div className="form-group">
-                <label className="form-label" htmlFor="input-marksPerQuestion">Marks Per Question*</label>
-                <input
-                  {...register('marksPerQuestion', { valueAsNumber: true })}
-                  type="number"
-                  id="input-marksPerQuestion"
-                  className="form-input"
-                  min={1}
-                  disabled={isLoading || isPublished}
-                />
-                {errors.marksPerQuestion && <span className="form-error">{errors.marksPerQuestion.message}</span>}
+            {/* Marking Scheme Section */}
+            <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '1.5rem', paddingTop: '1.5rem' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, fontFamily: 'var(--font-display)', marginBottom: '1.25rem', color: 'var(--text-primary)' }}>
+                Marking Scheme
+              </h3>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem' }}>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="input-negativeMarking">Wrong Answer*</label>
+                  <input
+                    {...register('negativeMarking', { valueAsNumber: true })}
+                    type="number"
+                    id="input-negativeMarking"
+                    className="form-input"
+                    placeholder="-1"
+                    disabled={isLoading || isPublished}
+                  />
+                  {errors.negativeMarking && <span className="form-error">{errors.negativeMarking.message}</span>}
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="input-unattempted">Unattempted*</label>
+                  <input
+                    {...register('unattemptedMarks', { valueAsNumber: true })}
+                    type="number"
+                    id="input-unattempted"
+                    className="form-input"
+                    placeholder="+0"
+                    disabled={isLoading || isPublished}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="input-marksPerQuestion">Correct Answer*</label>
+                  <input
+                    {...register('marksPerQuestion', { valueAsNumber: true })}
+                    type="number"
+                    id="input-marksPerQuestion"
+                    className="form-input"
+                    placeholder="+5"
+                    disabled={isLoading || isPublished}
+                  />
+                  {errors.marksPerQuestion && <span className="form-error">{errors.marksPerQuestion.message}</span>}
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="input-noOfQuestions">No of Questions*</label>
+                  <input
+                    {...register('noOfQuestions', { valueAsNumber: true })}
+                    type="number"
+                    id="input-noOfQuestions"
+                    className="form-input"
+                    placeholder="Ex: 50"
+                    disabled={isLoading || isPublished}
+                  />
+                  {errors.noOfQuestions && <span className="form-error">{errors.noOfQuestions.message}</span>}
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="input-totalMarks">Total Marks*</label>
+                  <input
+                    {...register('totalMarks', { valueAsNumber: true })}
+                    type="number"
+                    id="input-totalMarks"
+                    className="form-input"
+                    placeholder="Ex: 250"
+                    disabled={isLoading || isPublished}
+                  />
+                  {errors.totalMarks && <span className="form-error">{errors.totalMarks.message}</span>}
+                </div>
               </div>
-
-              {/* Negative Marking */}
-              <div className="form-group">
-                <label className="form-label" htmlFor="input-negativeMarking">Negative Marks*</label>
-                <input
-                  {...register('negativeMarking', { valueAsNumber: true })}
-                  type="number"
-                  step="any"
-                  id="input-negativeMarking"
-                  className="form-input"
-                  min={0}
-                  disabled={isLoading || isPublished}
-                />
-                {errors.negativeMarking && <span className="form-error">{errors.negativeMarking.message}</span>}
-              </div>
-
             </div>
 
             {/* Actions Panel */}
@@ -399,8 +475,8 @@ export const TestForm: React.FC = () => {
               justifyContent: 'space-between',
               alignItems: 'center',
               borderTop: '1px solid var(--border-color)',
-              paddingTop: '1.5rem',
-              marginTop: '1rem'
+              paddingTop: '2rem',
+              marginTop: '1.5rem'
             }}>
               <button
                 type="button"
@@ -410,7 +486,7 @@ export const TestForm: React.FC = () => {
                 id="btn-form-cancel"
               >
                 <ArrowLeft size={16} />
-                <span>Back to Dashboard</span>
+                <span>Cancel</span>
               </button>
 
               {!isPublished && (
@@ -419,9 +495,10 @@ export const TestForm: React.FC = () => {
                   className="btn btn-primary"
                   disabled={isLoading}
                   id="btn-form-submit"
+                  style={{ minWidth: '120px' }}
                 >
                   <Save size={16} />
-                  <span>{isLoading ? 'Saving...' : 'Save & Continue'}</span>
+                  <span>{isLoading ? 'Saving...' : isEditMode ? 'Save' : 'Next'}</span>
                 </button>
               )}
             </div>
