@@ -36,6 +36,11 @@ export const TestPreview: React.FC = () => {
   } = useTestStore();
 
   const [isPublishing, setIsPublishing] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishType, setPublishType] = useState<'now' | 'schedule'>('now');
+  const [liveUntil, setLiveUntil] = useState<'always' | '1week' | '2weeks' | '3weeks' | '1month' | 'custom'>('always');
+  const [endDate, setEndDate] = useState('');
+  const [endTime, setEndTime] = useState('12:00 PM');
 
   // 1. Initial Load
   useEffect(() => {
@@ -54,13 +59,16 @@ export const TestPreview: React.FC = () => {
     }
   }, [error]);
 
-  const handlePublish = async () => {
-    if (!id) return;
-    
+  const handlePublishClick = () => {
     if (questions.length === 0) {
       toast.error('You cannot publish a test with no questions. Please add at least one question.');
       return;
     }
+    setShowPublishModal(true);
+  };
+
+  const handleConfirmPublish = async () => {
+    if (!id) return;
 
     setIsPublishing(true);
     const updated = await publishTest(id);
@@ -68,6 +76,7 @@ export const TestPreview: React.FC = () => {
     
     if (updated) {
       toast.success('Congratulations! The test has been published successfully.');
+      setShowPublishModal(false);
       navigate('/dashboard');
     }
   };
@@ -370,7 +379,7 @@ export const TestPreview: React.FC = () => {
 
               {!isPublished ? (
                 <button
-                  onClick={handlePublish}
+                  onClick={handlePublishClick}
                   className="btn btn-primary"
                   id="btn-preview-publish"
                   disabled={isLoading || isPublishing || questions.length === 0}
@@ -394,6 +403,150 @@ export const TestPreview: React.FC = () => {
 
         </div>
       ) : null}
+
+      {/* Figma Confirm Publish Modal */}
+      {showPublishModal && (
+        <div className="modal-overlay" onClick={() => setShowPublishModal(false)}>
+          <div className="modal-content" style={{ maxWidth: '600px', width: '95%' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+              <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.25rem' }}>Test creation</h3>
+              <button onClick={() => setShowPublishModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.5rem', lineHeight: 1 }}>&times;</button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--success-glow)', color: 'var(--success-hover)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem', fontSize: '0.9rem', fontWeight: 600 }}>
+              <CheckCircle size={18} />
+              <span>Test created : All {questions.length} Questions done</span>
+            </div>
+
+            {/* Tab choices */}
+            <div style={{ display: 'flex', gap: '0.5rem', backgroundColor: 'var(--bg-tertiary)', padding: '0.25rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem' }}>
+              <button 
+                type="button" 
+                onClick={() => setPublishType('now')}
+                style={{
+                  flex: 1,
+                  padding: '0.65rem',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  backgroundColor: publishType === 'now' ? 'var(--bg-secondary)' : 'transparent',
+                  color: publishType === 'now' ? 'var(--primary)' : 'var(--text-secondary)',
+                  boxShadow: publishType === 'now' ? 'var(--shadow-sm)' : 'none',
+                  transition: 'all var(--transition-fast)'
+                }}
+              >
+                Publish Now
+              </button>
+              <button 
+                type="button" 
+                onClick={() => setPublishType('schedule')}
+                style={{
+                  flex: 1,
+                  padding: '0.65rem',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  backgroundColor: publishType === 'schedule' ? 'var(--bg-secondary)' : 'transparent',
+                  color: publishType === 'schedule' ? 'var(--primary)' : 'var(--text-secondary)',
+                  boxShadow: publishType === 'schedule' ? 'var(--shadow-sm)' : 'none',
+                  transition: 'all var(--transition-fast)'
+                }}
+              >
+                Schedule Publish
+              </button>
+            </div>
+
+            {/* Live Until radio options grid */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.25rem' }}>Live Until</h4>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>Choose how long this test should remain available on the platform</p>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', cursor: 'pointer', padding: '0.6rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: liveUntil === 'always' ? 'var(--primary-glow)' : 'var(--bg-primary)', borderColor: liveUntil === 'always' ? 'var(--primary)' : 'var(--border-color)' }}>
+                  <input type="radio" checked={liveUntil === 'always'} onChange={() => setLiveUntil('always')} style={{ cursor: 'pointer' }} />
+                  <span>Always Available</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', cursor: 'pointer', padding: '0.6rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: liveUntil === '3weeks' ? 'var(--primary-glow)' : 'var(--bg-primary)', borderColor: liveUntil === '3weeks' ? 'var(--primary)' : 'var(--border-color)' }}>
+                  <input type="radio" checked={liveUntil === '3weeks'} onChange={() => setLiveUntil('3weeks')} style={{ cursor: 'pointer' }} />
+                  <span>3 Weeks</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', cursor: 'pointer', padding: '0.6rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: liveUntil === '1week' ? 'var(--primary-glow)' : 'var(--bg-primary)', borderColor: liveUntil === '1week' ? 'var(--primary)' : 'var(--border-color)' }}>
+                  <input type="radio" checked={liveUntil === '1week'} onChange={() => setLiveUntil('1week')} style={{ cursor: 'pointer' }} />
+                  <span>1 Week</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', cursor: 'pointer', padding: '0.6rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: liveUntil === '1month' ? 'var(--primary-glow)' : 'var(--bg-primary)', borderColor: liveUntil === '1month' ? 'var(--primary)' : 'var(--border-color)' }}>
+                  <input type="radio" checked={liveUntil === '1month'} onChange={() => setLiveUntil('1month')} style={{ cursor: 'pointer' }} />
+                  <span>1 Month</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', cursor: 'pointer', padding: '0.6rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: liveUntil === '2weeks' ? 'var(--primary-glow)' : 'var(--bg-primary)', borderColor: liveUntil === '2weeks' ? 'var(--primary)' : 'var(--border-color)' }}>
+                  <input type="radio" checked={liveUntil === '2weeks'} onChange={() => setLiveUntil('2weeks')} style={{ cursor: 'pointer' }} />
+                  <span>2 Weeks</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', cursor: 'pointer', padding: '0.6rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: liveUntil === 'custom' ? 'var(--primary-glow)' : 'var(--bg-primary)', borderColor: liveUntil === 'custom' ? 'var(--primary)' : 'var(--border-color)' }}>
+                  <input type="radio" checked={liveUntil === 'custom'} onChange={() => setLiveUntil('custom')} style={{ cursor: 'pointer' }} />
+                  <span>Custom Duration</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Custom duration inputs */}
+            {(liveUntil === 'custom' || publishType === 'schedule') && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem', animation: 'fadeIn 0.2s ease-out' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.85rem' }}>Select End Date</label>
+                  <input 
+                    type="date" 
+                    value={endDate} 
+                    onChange={(e) => setEndDate(e.target.value)} 
+                    className="form-input" 
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.85rem' }}>Select End Time</label>
+                  <select 
+                    value={endTime} 
+                    onChange={(e) => setEndTime(e.target.value)} 
+                    className="form-select"
+                    style={{ width: '100%' }}
+                  >
+                    <option value="12:00 AM">12:00 AM</option>
+                    <option value="09:00 AM">09:00 AM</option>
+                    <option value="12:00 PM">12:00 PM</option>
+                    <option value="03:00 PM">03:00 PM</option>
+                    <option value="06:00 PM">06:00 PM</option>
+                    <option value="09:00 PM">09:00 PM</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* Confirm Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+              <button 
+                type="button" 
+                onClick={() => setShowPublishModal(false)} 
+                className="btn btn-secondary"
+                style={{ padding: '0.6rem 1.5rem' }}
+                disabled={isPublishing}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                onClick={handleConfirmPublish} 
+                className="btn btn-primary"
+                disabled={isPublishing}
+                style={{ padding: '0.6rem 1.5rem', backgroundColor: 'var(--success)', borderColor: 'var(--success)' }}
+              >
+                {isPublishing ? 'Confirming...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Spinner style */}
       <style>{`
